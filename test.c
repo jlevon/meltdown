@@ -20,6 +20,7 @@ const char *strings[] = {
 
 int main(int argc, char *argv[]) {
   libkdump_config_t config;
+  libkdump_enable_debug(1);
   config = libkdump_get_autoconfig();
   libkdump_init(config);
 

@@ -1,4 +1,4 @@
-CFLAGS=-m64 -O3 -pthread -Wno-attributes 
+CFLAGS=-m64 -O3 -Wno-attributes
 CC=gcc
 
 #BINARIES=test kaslr physical_reader
@@ -6,13 +6,18 @@ CC=gcc
 SOURCES := $(wildcard *.c)
 BINARIES := $(SOURCES:%.c=%)
 
-all: $(BINARIES)
+.PHONY: lib
+
+all: $(BINARIES) lib
+
+lib:
+	$(MAKE) -C libkdump
 
 libkdump/libkdump.a: 
 	make -C libkdump
 
 %: %.c libkdump/libkdump.a
-	$(CC) $< -o $@ -Llibkdump -Ilibkdump -lkdump -static $(CFLAGS)
+	$(CC) $< -o $@ -Llibkdump -Ilibkdump -lkdump $(CFLAGS)
 	
 	
 clean:

