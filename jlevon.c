@@ -3,19 +3,27 @@
 #include <stdlib.h>
 #include <time.h>
 
+extern void debug(int symbol, const char *fmt, ...);
+
 int main(int argc, char *argv[]) {
   size_t scratch[4096];
   libkdump_config_t config;
   int progress = 0;
   unsigned char secret = 'X';
 
-  libkdump_enable_debug(0);
+  libkdump_enable_debug(1);
 
   config = libkdump_get_autoconfig();
-  config.retries = 10000;
-  config.measurements = 8;
+  config.retries = 40000;
+  config.measurements = 4;
+  /*
+   * this is more reliable than auto-tuning right now, needs a quieter
+   * test host.
+   */
+  config.cache_miss_threshold = 166;
+  debug(1, "forced retries: %d, measurements: %d, threshold %d cycles\n",
+  config.retries, config.measurements, config.cache_miss_threshold);
 
-	printf("tsx forced off\n");
  printf("attempting to read from address %s\n", argv[1]);
 
  uint64_t addr = strtoull(argv[1], NULL, 16);

@@ -8,7 +8,7 @@ BINARIES := $(SOURCES:%.c=%)
 
 .PHONY: lib
 
-all: $(BINARIES) lib
+all: lib $(BINARIES)
 
 lib:
 	$(MAKE) -C libkdump

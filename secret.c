@@ -16,6 +16,7 @@ const char *strings[] = {
     "How can you read this? You should not read this!"};
 
 int main(int argc, char *argv[]) {
+  char cmd[4096];
   libkdump_config_t config;
   config = libkdump_get_autoconfig();
   libkdump_init(config);
@@ -24,8 +25,11 @@ int main(int argc, char *argv[]) {
   const char *secret = strings[rand() % (sizeof(strings) / sizeof(strings[0]))];
   int len = strlen(secret);
 
+  sprintf(cmd, "./virt2phys %u 0x%p\n", getpid(), secret);
+  system(cmd);
   printf("\x1b[32;1m[+]\x1b[0m Secret: \x1b[33;1m%s\x1b[0m\n", secret);
 
+#if 0
   size_t paddr = libkdump_virt_to_phys((size_t)secret);
   if (!paddr) {
     printf("\x1b[31;1m[!]\x1b[0m Program requires root privileges (or read access to /proc/<pid>/pagemap)!\n");
@@ -34,6 +38,7 @@ int main(int argc, char *argv[]) {
   }
 
   printf("\x1b[32;1m[+]\x1b[0m Physical address of secret: \x1b[32;1m0x%zx\x1b[0m\n", paddr);
+#endif
   printf("\x1b[32;1m[+]\x1b[0m Exit with \x1b[37;1mCtrl+C\x1b[0m if you are done reading the secret\n");
   while (1) {
     // keep string cached for better results

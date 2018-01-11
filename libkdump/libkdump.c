@@ -79,7 +79,7 @@ static libkdump_config_t config;
 typedef enum { ERROR, INFO, SUCCESS } d_sym_t;
 
 // ---------------------------------------------------------------------------
-static void debug(d_sym_t symbol, const char *fmt, ...) {
+void debug(d_sym_t symbol, const char *fmt, ...) {
   if (!dbg)
     return;
 
@@ -137,7 +137,7 @@ static int __attribute__((always_inline)) flush_reload(void *ptr, size_t addr) {
   flush(ptr);
 
   if (end - start < config.cache_miss_threshold) {
-	if (dbg) printf("hit at %lx with miss cost %lu, val 0x%x\n", addr, end-start, ((char *)ptr - mem) / 4096);
+	//if (dbg) printf("hit at %lx with miss cost %lu, val 0x%x\n", addr, end-start, ((char *)ptr - mem) / 4096);
     return 1;
   }
   return 0;
@@ -239,26 +239,39 @@ static void detect_flush_reload_threshold() {
   size_t dummy[16];
   size_t *ptr = dummy + 8;
   uint64_t start = 0, end = 0;
+  uint64_t max_reload = 0, max_flush_reload = 0;
 
   maccess(ptr);
   for (i = 0; i < count; i++) {
     start = rdtsc();
     maccess(ptr);
     end = rdtsc();
+#if 0
+	if (end < start || (end - start) > 10000)
+		printf("reload start %zu end %zu diff %zu\n", start, end, end - start);
+#endif
     reload_time += (end - start);
+    max_reload = (end - start) > max_reload ? (end - start) : max_reload;
   }
   for (i = 0; i < count; i++) {
     start = rdtsc();
     maccess(ptr);
     end = rdtsc();
     flush(ptr);
+#if 0
+	if (end < start || (end - start) > 10000)
+		printf("flush start %zu end %zu diff %zu\n", start, end, end - start);
+#endif
     flush_reload_time += (end - start);
+    max_flush_reload = (end - start) > max_flush_reload ? (end - start) : max_flush_reload;
   }
   reload_time /= count;
   flush_reload_time /= count;
 
   debug(INFO, "Flush+Reload: %zd cycles, Reload only: %zd cycles\n",
         flush_reload_time, reload_time);
+  debug(INFO, "max Flush+Reload: %zu cycles, max Reload only: %zu cycles\n",
+        max_flush_reload, max_reload);
   config.cache_miss_threshold = (flush_reload_time + reload_time * 2) / 3;
   debug(SUCCESS, "Flush+Reload threshold: %zd cycles\n",
         config.cache_miss_threshold);
